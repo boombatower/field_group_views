@@ -1,0 +1,100 @@
+<?php
+/**
+ * @file
+ * Provides primary Drupal hook implementations.
+ *
+ * @author Jimmy Berry ("boombatower", http://drupal.org/user/214218)
+ */
+
+/**
+ * Implements hook_field_group_formatter_info().
+ */
+function field_group_views_field_group_formatter_info() {
+  $info = array(
+    'view' => array(
+      'label' => t('View'),
+      'description' => t('Display fieldgroup using a view.'),
+    ),
+  );
+  return array(
+//     'form' => $info, @TODO Requires editting of fields in a view.
+    'display' => $info,
+  );
+}
+
+/**
+ * Implements hook_field_group_format_summary().
+ */
+function field_group_views_field_group_format_summary($group) {
+  if ($group->format_type == 'view') {
+    return t('Determined by <em>!name</em> view.', array('!name' => field_group_views_name_display($group)));
+  }
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter(): field_ui_display_overview_form.
+ */
+function field_group_views_form_field_ui_display_overview_form_alter(&$form, &$form_state) {
+  $form['#submit'][] = 'field_group_views_view_create';
+}
+
+/**
+ * Cycle through group and create views if necessary.
+ */
+function field_group_views_view_create($form, &$form_state) {
+  if (!empty($form_state['field_group'])) {
+    foreach ($form_state['field_group'] as $group) {
+      if (!views_get_view($group->group_name)) {
+        $view = views_new_view();
+        $view->name = $group->group_name;
+        // @TODO Add entity ID argument.
+        foreach($group->children as $child) {
+          // @TODO Add field to view.
+        }
+        $view->save();
+
+        views_get_view($group->group_name, TRUE);
+        drupal_set_message(t('Created <em>!name</em> view.', array('!name' => field_group_views_name_display($group))));
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_field_group_pre_render().
+ */
+function field_group_views_field_group_pre_render(&$element, $group, &$form) {
+  if ($group->format_type == 'view') {
+    // Since all fields are assumed to have the same object, take the first
+    // field's object determine the entity ID key, and get the entity ID.
+    $field = current($element);
+    $info = entity_get_info($group->entity_type);
+    $id = $field['#object']->{$info['entity keys']['id']};
+
+    // Load the group view and override the fields display with the view.
+    if ($view = views_get_view($group->group_name)) {
+      $view->override_path = $_GET['q'];
+      $element = array(
+        '#type' => 'markup',
+        '#value' => $view->preview(array($id)),
+        '#weight' => $group->weight,
+      );
+    }
+  }
+}
+
+/**
+ * Generate display text for a group view.
+ *
+ * @param $group
+ *   Field group.
+ * @return
+ *   Text representing a group view, either a link or just the name.
+ */
+function field_group_views_name_display($group) {
+  $name = $group->group_name;
+  if (module_exists('views_ui') && views_get_view($name)) {
+    $name = l($name, 'admin/structure/views/edit/' . $name);
+  }
+  return $name;
+}
