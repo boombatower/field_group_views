@@ -159,7 +159,6 @@ function field_group_views_views_data_alter_group(&$data, $group) {
   if (!$primary_field) {
     $primary_field = array_shift($group->children);
   }
-  $primary_table_name = "field_data_$primary_field";
 
   foreach ($group->children as $field_name) {
     // Ignore the primary field if it is still in the children array.
@@ -167,21 +166,6 @@ function field_group_views_views_data_alter_group(&$data, $group) {
       continue;
     }
 
-    // If the field is not stored in field_sql_storage we cannot generate views
-    // table join information since the scheme will be different.
-    $info = field_info_field($field_name);
-    if ($info['storage']['type'] == 'field_sql_storage') {
-      $table_name = "field_data_$field_name";
-
-      $data[$primary_table_name]['table']['join']['field_data_' . $table_name] = array(
-        'handler' => 'views_field_join',
-        'left_field' => array('entity_type', 'entity_id', 'deleted', 'delta', 'language'), // Primary key fields.
-        'field' => array('entity_type', 'entity_id', 'deleted', 'delta', 'language'),
-        'type' => 'INNER',
-        'extra' => array(
-          array('field' => 'deleted', 'value' => 0, 'numeric' => TRUE),
-        ),
-      );
-    }
+    views_field_add_multi_join($data, $primary_field, $field_name);
   }
 }
