@@ -74,9 +74,8 @@ function field_group_views_field_group_pre_render(&$element, $group, &$form) {
     // Load the group view and override the fields display with the view.
     if ($view = views_get_view($group->group_name)) {
       $view->override_path = $_GET['q'];
-      $element = array(
-        '#type' => 'markup',
-        '#value' => $view->preview(array($id)),
+      $element += array(
+        '#markup' => $view->preview('default', array($id)),
         '#weight' => $group->weight,
       );
     }
