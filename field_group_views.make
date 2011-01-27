@@ -9,4 +9,4 @@ projects[drupal] = 7
 ; Dependencies
 
 projects[field_group] = 1
-projects[views] = 3
+projects[views_field] = 1

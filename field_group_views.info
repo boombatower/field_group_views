@@ -3,4 +3,4 @@ description = Provides view format for fieldgroup.
 package = Fields
 core = 7.x
 dependencies[] = field_group
-dependencies[] = views
+dependencies[] = views_field
