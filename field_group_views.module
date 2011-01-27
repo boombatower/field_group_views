@@ -131,13 +131,18 @@ function field_group_views_views_data_alter(&$data) {
     foreach ($bundles as $bundle => $displays) {
       foreach ($displays as $mode => $groups) {
         // Currently only support views for the display mode.
-        if ($mode == 'form') {
-          continue;
-        }
-
-        foreach ($groups as $group_name => $group) {
-          if ($group->format_type == 'view') {
-            field_group_views_views_data_alter_group($data, $group);
+        if ($mode != 'form') {
+          foreach ($groups as $group_name => $group) {
+            // Only process groups using the view format type.
+            if ($group->format_type == 'view') {
+              $primary_field = field_group_views_primary_field($group);
+              foreach ($group->children as $field_name) {
+                // Ignore the primary field if it is still in the children array.
+                if ($field_name != $primary_field) {
+                  views_field_add_multi_join($data, $primary_field, $field_name);
+                }
+              }
+            }
           }
         }
       }
@@ -146,26 +151,15 @@ function field_group_views_views_data_alter(&$data) {
 }
 
 /**
- * Generate view table join information for each field to the primary field.
+ * Determine the primary field for a group.
  *
- * @param $data
- *   Reference to hook_views_data_alter() $data argument.
  * @param $group
  *   Field group object.
  */
-function field_group_views_views_data_alter_group(&$data, $group) {
+function field_group_views_primary_field($group) {
   // If the primary_field is set then use it, otherwise default to the first.
-  $primary_field = $group->format_settings['instance_settings']['primary_field'];
-  if (!$primary_field) {
-    $primary_field = array_shift($group->children);
+  if (!($primary_field = $group->format_settings['instance_settings']['primary_field'])) {
+    $primary_field = $group->children ? array_shift($group->children) : FALSE;
   }
-
-  foreach ($group->children as $field_name) {
-    // Ignore the primary field if it is still in the children array.
-    if ($field_name == $primary_field) {
-      continue;
-    }
-
-    views_field_add_multi_join($data, $primary_field, $field_name);
-  }
+  return $primary_field;
 }
