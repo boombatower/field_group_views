@@ -151,9 +151,11 @@ function field_group_views_field_group_pre_render(&$element, $group, &$form) {
  */
 function field_group_views_form_field_group_delete_form_alter(&$form, &$form_state) {
   $group = $form_state['build_info']['args'][0];
-  $form['description']['#markup'] = t('The <em>!name</em> view will be deleted.', array('!name' => field_group_views_name_display($group))) .
-    ' ' . $form['description']['#markup'];
-  $form['#submit'][] = 'field_group_views_field_group_delete_form_submit';
+  if ($group->format_type == 'view') {
+    $form['description']['#markup'] = t('The <em>!name</em> view will be deleted.', array('!name' => field_group_views_name_display($group))) .
+      ' ' . $form['description']['#markup'];
+    $form['#submit'][] = 'field_group_views_field_group_delete_form_submit';
+  }
 }
 
 /**
