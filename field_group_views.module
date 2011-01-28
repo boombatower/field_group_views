@@ -177,7 +177,8 @@ function field_group_views_views_data_alter(&$data) {
  */
 function field_group_views_primary_field($group) {
   // If the primary_field is set then use it, otherwise default to the first.
-  if (!($primary_field = $group->format_settings['instance_settings']['primary_field'])) {
+  if (!isset($group->format_settings['instance_settings']['primary_field']) ||
+    !($primary_field = $group->format_settings['instance_settings']['primary_field'])) {
     $primary_field = $group->children ? array_shift($group->children) : FALSE;
   }
   return $primary_field;
