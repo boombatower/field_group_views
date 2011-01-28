@@ -57,66 +57,6 @@ function field_group_views_field_group_format_summary($group) {
 }
 
 /**
- * Implements hook_form_FORM_ID_alter(): field_ui_display_overview_form.
- */
-function field_group_views_form_field_ui_display_overview_form_alter(&$form, &$form_state) {
-  $form['#submit'][] = 'field_group_views_view_create';
-}
-
-/**
- * Cycle through group and create views if necessary.
- */
-function field_group_views_view_create($form, &$form_state) {
-  // Update field views_base_table setting based on current state.
-  $fields = field_info_fields();
-  foreach ($form_state['values']['fields'] as $field_name => $field) {
-    $value = (bool) $field['parent'];
-    if ($value != $fields[$field_name]['settings']['views_base_table']) {
-      $fields[$field_name]['settings']['views_base_table'] = $value;
-      field_update_field($fields[$field_name]);
-    }
-  }
-
-  // Create/Recreate views for field groups where necessary.
-  if (!empty($form_state['field_group'])) {
-    foreach ($form_state['field_group'] as $group) {
-      $view = views_get_view($group->group_name);
-      $primary_field = field_group_views_primary_field($group);
-      $primary_field_table = "field_data_$primary_field";
-
-      // If the related view does not exist or the primary table needs to be
-      // changed the go through the view creation process.
-      if (!$view || $view->base_table != $primary_field_table) {
-        // If view already exists then delete it.
-        if ($view) {
-          $view->delete();
-        }
-
-        $view = views_new_view();
-        $view->name = $group->group_name;
-        $view->base_table = $primary_field_table;
-
-        // Add entity_id argument.
-        $handler = $view->new_display('default', 'Defaults', 'default');
-        $handler->override_option('arguments', array(
-          'entity_id_raw' => array(
-            'id' => 'entity_id_rawr',
-            'table' => $view->base_table,
-            'field' => 'entity_id_raw',
-            'default_action' => 'not found',
-          ),
-        ));
-        $view->save();
-
-        // Ensure static cache is reset so new view will be detected.
-        views_get_view($group->group_name, TRUE);
-        drupal_set_message(t('Created <em>!name</em> view.', array('!name' => field_group_views_name_display($group))));
-      }
-    }
-  }
-}
-
-/**
  * Implements hook_field_group_pre_render().
  */
 function field_group_views_field_group_pre_render(&$element, $group, &$form) {
@@ -144,9 +84,7 @@ function field_group_views_field_group_pre_render(&$element, $group, &$form) {
 function field_group_views_form_field_group_delete_form_alter(&$form, &$form_state) {
   $group = $form_state['build_info']['args'][0];
   if ($group->format_type == 'view') {
-    $form['description']['#markup'] = t('The <em>!name</em> view will be deleted.', array('!name' => field_group_views_name_display($group))) .
-      ' ' . $form['description']['#markup'];
-    $form['#submit'][] = 'field_group_views_field_group_delete_form_submit';
+    $form['description']['#markup'] = t('The <em>!name</em> view will be deleted.', array('!name' => field_group_views_name_display($group))) . ' ' . $form['description']['#markup'];
   }
 }
 
@@ -156,40 +94,146 @@ function field_group_views_form_field_group_delete_form_alter(&$form, &$form_sta
 function field_group_views_field_group_delete_form_submit($form, &$form_state) {
   // Load the view related to the group and delete it.
   $group = $form_state['build_info']['args'][0];
-  $view = views_get_view($group->group_name);
-  $view->delete();
+  if ($view = views_get_view($group->group_name)) {
+    $view->delete();
+    drupal_set_message(t('Deleted <em>@name</em> view.', array('@name' => $group->group_name)));
+  }
+}
 
-  drupal_set_message(t('Deleted <em>@name</em> view.', array('@name' => $group->group_name)));
+/**
+ * Implements hook_field_group_update_field_group().
+ */
+function field_group_views_field_group_update_field_group($group) {
+  field_group_views_flush_caches();
+}
+
+/**
+ * Implements hook_field_group_delete_field_group().
+ */
+function field_group_views_field_group_delete_field_group($group) {
+  // Load the view related to the group and delete it.
+  if ($view = views_get_view($group->group_name)) {
+    $view->delete();
+    drupal_set_message(t('Deleted <em>@name</em> view.', array('@name' => $group->group_name)));
+  }
+  field_group_views_flush_caches();
+}
+
+/**
+ * Implements hook_flush_caches().
+ */
+function field_group_views_flush_caches() {
+  // Create/Recreate group views and collect list of relevant field names.
+  $field_names = field_group_views_groups_iterate('field_group_views_update_view');
+
+  // Update field views_base_table setting based on current state.
+  $fields = field_info_fields();
+  foreach ($fields as $field_name => $field) {
+    $value = isset($field_names[$field_name]);
+    if ($value != $fields[$field_name]['settings']['views_base_table']) {
+      $fields[$field_name]['settings']['views_base_table'] = $value;
+      field_update_field($fields[$field_name]);
+    }
+  }
+}
+
+/**
+ * Create/Recreate group views and return list of relevant field names.
+ *
+ * @param $group
+ *   Field group object.
+ * @return
+ *   Relevant field names.
+ */
+function field_group_views_update_view($group) {
+  $view = views_get_view($group->group_name);
+  $primary_field = field_group_views_primary_field($group);
+  $primary_field_table = "field_data_$primary_field";
+
+  // If the related view does not exist or the primary table needs to be
+  // changed the go through the view creation process.
+  if ($primary_field && (!$view || $view->base_table != $primary_field_table)) {
+    // If view already exists then delete it.
+    if ($view) {
+      $view->delete();
+    }
+
+    $view = views_new_view();
+    $view->name = $group->group_name;
+    $view->base_table = $primary_field_table;
+
+    // Add entity_id argument.
+    $handler = $view->new_display('default', 'Defaults', 'default');
+    $handler->override_option('arguments', array(
+      'entity_id_raw' => array(
+        'id' => 'entity_id_rawr',
+        'table' => $view->base_table,
+        'field' => 'entity_id_raw',
+        'default_action' => 'not found',
+      ),
+    ));
+    $view->save();
+
+    // Ensure static cache is reset so new view will be detected.
+    views_get_view($group->group_name, TRUE);
+    drupal_set_message(t('Created <em>!name</em> view.', array('!name' => field_group_views_name_display($group))));
+  }
+
+  // Build list of children of relevant groups.
+  return drupal_map_assoc($group->children);
 }
 
 /**
  * Implements hook_views_data_alter().
  */
 function field_group_views_views_data_alter(&$data) {
-  // Cycle through field group information to find all groups of the display
-  // mode and generate table join information for each group of fields.
-  $info = field_group_info_groups();
+  field_group_views_groups_iterate('field_group_views_views_data_alter_group', $data);
+}
+
+/**
+ * Add view join information for non-primary fields within groups.
+ *
+ * @param $group
+ *   Field group object.
+ * @see hook_views_data_alter()
+ */
+function field_group_views_views_data_alter_group($group, &$data) {
+  $primary_field = field_group_views_primary_field($group);
+  foreach ($group->children as $field_name) {
+    if ($field_name != $primary_field) {
+      views_field_add_multi_join($data, $field_name, $primary_field);
+    }
+  }
+  return array();
+}
+
+/**
+ * Interate over all relevant field groups and invoke a callback.
+ *
+ * @param $callback
+ *   Function name to call for each group.
+ * @param $argument
+ *   (Optional) Reference to argument that can be modified by callback.
+ * @return
+ *   Merged array of values returned by callback.
+ */
+function field_group_views_groups_iterate($callback, &$argument = NULL) {
+  $return = array();
+  $info = field_group_info_groups(NULL, NULL, NULL, TRUE);
   foreach ($info as $entity_type => $bundles) {
     foreach ($bundles as $bundle => $displays) {
       foreach ($displays as $mode => $groups) {
-        // Currently only support views for the display mode.
-        if ($mode != 'form') {
+        if ($mode != 'form') { // Currently only support views for the display mode.
           foreach ($groups as $group_name => $group) {
-            // Only process groups using the view format type.
-            if ($group->format_type == 'view') {
-              $primary_field = field_group_views_primary_field($group);
-              foreach ($group->children as $field_name) {
-                // Ignore the primary field.
-                if ($field_name != $primary_field) {
-                  views_field_add_multi_join($data, $field_name, $primary_field);
-                }
-              }
+            if ($group->format_type == 'view') { // Only process groups using the view format type.
+              $return += $callback($group, $argument);
             }
           }
         }
       }
     }
   }
+  return $return;
 }
 
 /**
