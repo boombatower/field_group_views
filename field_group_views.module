@@ -33,8 +33,9 @@ function field_group_views_field_group_format_settings($group) {
     $formatter = $field_group_types[$mode][$group->format_type];
 
     $form['instance_settings']['primary_field'] = array(
-      '#title' => t('Primary field'),
       '#type' => 'select',
+      '#title' => t('Primary field'),
+      '#description' => t('The field to use as the base table for the view on which all other field tables will be joined.'),
       '#options' => drupal_map_assoc($group->children),
       '#default_value' => $formatter['instance_settings']['primary_field'],
       '#weight' => 2,
@@ -69,15 +70,35 @@ function field_group_views_form_field_ui_display_overview_form_alter(&$form, &$f
 function field_group_views_view_create($form, &$form_state) {
   if (!empty($form_state['field_group'])) {
     foreach ($form_state['field_group'] as $group) {
-      if (!views_get_view($group->group_name)) {
+      $view = views_get_view($group->group_name);
+      $primary_field = field_group_views_primary_field($group);
+      $primary_field_table = "field_data_$primary_field";
+
+      // If the related view does not exist or the primary table needs to be
+      // changed the go through the view creation process.
+      if (!$view || $view->base_table != $primary_field_table) {
+        // If view already exists then delete it.
+        if ($view) {
+          $view->delete();
+        }
+
         $view = views_new_view();
         $view->name = $group->group_name;
-        // @TODO Add entity ID argument.
-        foreach($group->children as $child) {
-          // @TODO Add field to view.
-        }
+        $view->base_table = $primary_field_table;
+
+        // Add entity_id argument.
+        $handler = $view->new_display('default', 'Defaults', 'default');
+        $handler->override_option('arguments', array(
+          'entity_id_raw' => array(
+            'id' => 'entity_id_rawr',
+            'table' => $view->base_table,
+            'field' => 'entity_id_raw',
+            'default_action' => 'not found',
+          ),
+        ));
         $view->save();
 
+        // Ensure static cache is reset so new view will be detected.
         views_get_view($group->group_name, TRUE);
         drupal_set_message(t('Created <em>!name</em> view.', array('!name' => field_group_views_name_display($group))));
       }
@@ -126,19 +147,25 @@ function field_group_views_field_group_pre_render(&$element, $group, &$form) {
 }
 
 /**
- * Generate display text for a group view.
- *
- * @param $group
- *   Field group.
- * @return
- *   Text representing a group view, either a link or just the name.
+ * Implements hook_form_FORM_ID_alter(): field_group_delete_form.
  */
-function field_group_views_name_display($group) {
-  $name = $group->group_name;
-  if (module_exists('views_ui') && views_get_view($name)) {
-    $name = l($name, 'admin/structure/views/edit/' . $name);
-  }
-  return $name;
+function field_group_views_form_field_group_delete_form_alter(&$form, &$form_state) {
+  $group = $form_state['build_info']['args'][0];
+  $form['description']['#markup'] = t('The <em>!name</em> view will be deleted.', array('!name' => field_group_views_name_display($group))) .
+    ' ' . $form['description']['#markup'];
+  $form['#submit'][] = 'field_group_views_field_group_delete_form_submit';
+}
+
+/**
+ * Delete view related to group.
+ */
+function field_group_views_field_group_delete_form_submit($form, &$form_state) {
+  // Load the view related to the group and delete it.
+  $group = $form_state['build_info']['args'][0];
+  $view = views_get_view($group->group_name);
+  $view->delete();
+
+  drupal_set_message(t('Deleted <em>@name</em> view.', array('@name' => $group->group_name)));
 }
 
 /**
@@ -172,6 +199,22 @@ function field_group_views_views_data_alter(&$data) {
 }
 
 /**
+ * Generate display text for a group view.
+ *
+ * @param $group
+ *   Field group.
+ * @return
+ *   Text representing a group view, either a link or just the name.
+ */
+function field_group_views_name_display($group) {
+  $name = $group->group_name;
+  if (module_exists('views_ui') && views_get_view($name)) {
+    $name = l($name, 'admin/structure/views/edit/' . $name);
+  }
+  return $name;
+}
+
+/**
  * Determine the primary field for a group.
  *
  * @param $group
@@ -179,8 +222,7 @@ function field_group_views_views_data_alter(&$data) {
  */
 function field_group_views_primary_field($group) {
   // If the primary_field is set then use it, otherwise default to the first.
-  if (!isset($group->format_settings['instance_settings']['primary_field']) ||
-    !($primary_field = $group->format_settings['instance_settings']['primary_field'])) {
+  if (!($primary_field = $group->format_settings['instance_settings']['primary_field'])) {
     $primary_field = $group->children ? array_shift($group->children) : FALSE;
   }
   return $primary_field;
