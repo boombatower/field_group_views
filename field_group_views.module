@@ -58,6 +58,7 @@ function field_group_views_field_group_format_summary($group) {
  */
 function field_group_views_form_field_ui_display_overview_form_alter(&$form, &$form_state) {
   $form['#submit'][] = 'field_group_views_view_create';
+  $form['#submit'][] = 'field_group_views_views_base_table_set';
 }
 
 /**
@@ -77,6 +78,24 @@ function field_group_views_view_create($form, &$form_state) {
 
         views_get_view($group->group_name, TRUE);
         drupal_set_message(t('Created <em>!name</em> view.', array('!name' => field_group_views_name_display($group))));
+      }
+    }
+  }
+}
+
+/**
+ * Cycles through groups and updates field setting for each child.
+ */
+function field_group_views_views_base_table_set($form, &$form_state) {
+  if (!empty($form_state['field_group'])) {
+    foreach ($form_state['field_group'] as $group) {
+      foreach ($group->children as $field_name) {
+        $field = field_info_field($field_name);
+        if (!$field['settings']['views_base_table']) {
+          $field['settings']['views_base_table'] = 1;
+          field_update_field($field);
+          drupal_set_message(t('Updated settings for <em>!name</em> field to expose as base table to Views module.', array('!name' => $field_name)));
+        }
       }
     }
   }
@@ -139,7 +158,7 @@ function field_group_views_views_data_alter(&$data) {
               foreach ($group->children as $field_name) {
                 // Ignore the primary field if it is still in the children array.
                 if ($field_name != $primary_field) {
-                  views_field_add_multi_join($data, $primary_field, $field_name);
+                  views_field_add_multi_join($data, $field_name, $primary_field);
                 }
               }
             }
