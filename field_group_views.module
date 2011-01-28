@@ -61,13 +61,23 @@ function field_group_views_field_group_format_summary($group) {
  */
 function field_group_views_form_field_ui_display_overview_form_alter(&$form, &$form_state) {
   $form['#submit'][] = 'field_group_views_view_create';
-  $form['#submit'][] = 'field_group_views_views_base_table_set';
 }
 
 /**
  * Cycle through group and create views if necessary.
  */
 function field_group_views_view_create($form, &$form_state) {
+  // Update field views_base_table setting based on current state.
+  $fields = field_info_fields();
+  foreach ($form_state['values']['fields'] as $field_name => $field) {
+    $value = (bool) $field['parent'];
+    if ($value != $fields[$field_name]['settings']['views_base_table']) {
+      $fields[$field_name]['settings']['views_base_table'] = $value;
+      field_update_field($fields[$field_name]);
+    }
+  }
+
+  // Create/Recreate views for field groups where necessary.
   if (!empty($form_state['field_group'])) {
     foreach ($form_state['field_group'] as $group) {
       $view = views_get_view($group->group_name);
@@ -101,24 +111,6 @@ function field_group_views_view_create($form, &$form_state) {
         // Ensure static cache is reset so new view will be detected.
         views_get_view($group->group_name, TRUE);
         drupal_set_message(t('Created <em>!name</em> view.', array('!name' => field_group_views_name_display($group))));
-      }
-    }
-  }
-}
-
-/**
- * Cycles through groups and updates field setting for each child.
- */
-function field_group_views_views_base_table_set($form, &$form_state) {
-  if (!empty($form_state['field_group'])) {
-    foreach ($form_state['field_group'] as $group) {
-      foreach ($group->children as $field_name) {
-        $field = field_info_field($field_name);
-        if (!$field['settings']['views_base_table']) {
-          $field['settings']['views_base_table'] = 1;
-          field_update_field($field);
-          drupal_set_message(t('Updated settings for <em>!name</em> field to expose as base table to Views module.', array('!name' => $field_name)));
-        }
       }
     }
   }
@@ -187,7 +179,7 @@ function field_group_views_views_data_alter(&$data) {
             if ($group->format_type == 'view') {
               $primary_field = field_group_views_primary_field($group);
               foreach ($group->children as $field_name) {
-                // Ignore the primary field if it is still in the children array.
+                // Ignore the primary field.
                 if ($field_name != $primary_field) {
                   views_field_add_multi_join($data, $field_name, $primary_field);
                 }
