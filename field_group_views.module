@@ -27,21 +27,23 @@ function field_group_views_field_group_formatter_info() {
  * Implements hook_field_group_format_settings().
  */
 function field_group_views_field_group_format_settings($group) {
-  $field_group_types = field_group_formatter_info();
-  $mode = $group->mode == 'form' ? 'form' : 'display';
-  $formatter = $field_group_types[$mode][$group->format_type];
+  if ($group->format_type == 'view') {
+    $field_group_types = field_group_formatter_info();
+    $mode = $group->mode == 'form' ? 'form' : 'display';
+    $formatter = $field_group_types[$mode][$group->format_type];
 
-  $form['instance_settings']['primary_field'] = array(
-    '#title' => t('Primary field'),
-    '#type' => 'select',
-    '#options' => drupal_map_assoc($group->children),
-    '#default_value' => $formatter['instance_settings']['primary_field'],
-    '#weight' => 2,
-  );
-  if (isset($group->format_settings['instance_settings']['primary_field'])) {
-    $form['instance_settings']['primary_field']['#default_value'] = $group->format_settings['instance_settings']['primary_field'];
+    $form['instance_settings']['primary_field'] = array(
+      '#title' => t('Primary field'),
+      '#type' => 'select',
+      '#options' => drupal_map_assoc($group->children),
+      '#default_value' => $formatter['instance_settings']['primary_field'],
+      '#weight' => 2,
+    );
+    if (isset($group->format_settings['instance_settings']['primary_field'])) {
+      $form['instance_settings']['primary_field']['#default_value'] = $group->format_settings['instance_settings']['primary_field'];
+    }
+    return $form;
   }
-  return $form;
 }
 
 /**
