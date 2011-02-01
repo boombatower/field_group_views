@@ -14,7 +14,7 @@ function field_group_views_field_group_formatter_info() {
     'view' => array(
       'label' => t('View'),
       'description' => t('Display fieldgroup using a view.'),
-      'instance_settings' => array('primary_field' => ''),
+      'instance_settings' => array('primary_field' => '', 'field_suppress' => 'never'),
     ),
   );
   return array(
@@ -42,6 +42,19 @@ function field_group_views_field_group_format_settings($group) {
     );
     if (isset($group->format_settings['instance_settings']['primary_field'])) {
       $form['instance_settings']['primary_field']['#default_value'] = $group->format_settings['instance_settings']['primary_field'];
+    }
+
+    if (module_exists('field_suppress')) {
+      $form['instance_settings']['field_suppress'] = array(
+        '#type' => 'select',
+        '#title' => t('Suppress fields'),
+        '#options' => field_suppress_states(),
+        '#default_value' => $formatter['instance_settings']['field_suppress'],
+        '#weight' => 3,
+      );
+      if (isset($group->format_settings['instance_settings']['field_suppress'])) {
+        $form['instance_settings']['field_suppress']['#default_value'] = $group->format_settings['instance_settings']['field_suppress'];
+      }
     }
     return $form;
   }
@@ -131,17 +144,7 @@ function field_group_views_field_group_delete_field_group($group) {
  */
 function field_group_views_flush_caches() {
   // Create/Recreate group views and collect list of relevant field names.
-  $field_names = field_group_views_groups_iterate('field_group_views_update_view');
-
-  // Update field views_base_table setting based on current state.
-  $fields = field_info_fields();
-  foreach ($fields as $field_name => $field) {
-    $value = isset($field_names[$field_name]);
-    if ($value != $fields[$field_name]['settings']['views_base_table']) {
-      $fields[$field_name]['settings']['views_base_table'] = $value;
-      field_update_field($fields[$field_name]);
-    }
-  }
+  $field_names = field_group_views_groups_iterate('field_group_views_flush_caches_interator');
 }
 
 /**
@@ -152,7 +155,7 @@ function field_group_views_flush_caches() {
  * @return
  *   Relevant field names.
  */
-function field_group_views_update_view($group) {
+function field_group_views_flush_caches_interator($group) {
   $view = views_get_view($group->group_name);
   $primary_field = field_group_views_primary_field($group);
   $primary_field_table = "field_data_$primary_field";
@@ -184,6 +187,16 @@ function field_group_views_update_view($group) {
     // Ensure static cache is reset so new view will be detected.
     views_get_view($group->group_name, TRUE);
     drupal_set_message(t('Created <em>!name</em> view.', array('!name' => field_group_views_name_display($group))));
+  }
+
+  // Update field settings for all children.
+  $fields = field_info_fields();
+  foreach ($group->children as $child) {
+    $field = $fields[$child];
+    $field['settings']['field_suppress'] = $group->format_settings['instance_settings']['field_suppress'];
+    $field['settings']['field_suppress_blank'] = $child == $primary_field;
+    $field['settings']['views_base_table'] = TRUE;
+    field_update_field($field);
   }
 
   // Build list of children of relevant groups.
