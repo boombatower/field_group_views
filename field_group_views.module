@@ -192,8 +192,9 @@ function field_group_views_flush_caches_interator($group) {
   // Update field settings for all children.
   $fields = field_info_fields();
   foreach ($group->children as $child) {
+    $settings = $group->format_settings['instance_settings'];
     $field = $fields[$child];
-    $field['settings']['field_suppress'] = $group->format_settings['instance_settings']['field_suppress'];
+    $field['settings']['field_suppress'] = isset($settings['field_suppress']) ? $settings['field_suppress'] : 'never';
     $field['settings']['field_suppress_blank'] = $child == $primary_field;
     $field['settings']['views_base_table'] = TRUE;
     field_update_field($field);
