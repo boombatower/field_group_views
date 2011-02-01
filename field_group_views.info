@@ -4,3 +4,4 @@ package = Fields
 core = 7.x
 dependencies[] = field_group
 dependencies[] = views_field
+recommends[] = field_suppress
