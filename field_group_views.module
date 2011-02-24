@@ -223,6 +223,7 @@ function field_group_views_views_data_alter_group($group, &$data) {
   foreach ($group->children as $field_name) {
     if ($field_name != $primary_field) {
       views_field_add_multi_join($data, $field_name, $primary_field);
+      views_field_add_multi_join($data, $field_name, $primary_field, 'field_revision');
     }
   }
   return array();
