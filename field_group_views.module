@@ -78,13 +78,16 @@ function field_group_views_field_group_pre_render(&$element, $group, &$form) {
     // field's object determine the entity ID key, and get the entity ID.
     $field = current($element);
     $info = entity_get_info($group->entity_type);
-    $id = $field['#object']->{$info['entity keys']['id']};
-
+    // Set view arguments.
+    $args[] = $field['#object']->{$info['entity keys']['id']};
+    if (isset($info['entity keys']['revision'])) {
+      $args[] = $field['#object']->{$info['entity keys']['revision']};
+    }
     // Load the group view and override the fields display with the view.
     if ($view = views_get_view($group->group_name)) {
       $view->override_path = $_GET['q'];
       $element += array(
-        '#markup' => $view->preview('default', array($id)),
+        '#markup' => $view->preview('default', $args),
         '#weight' => $group->weight,
       );
     }
@@ -176,7 +179,7 @@ function field_group_views_flush_caches_interator($group) {
     $handler = $view->new_display('default', 'Defaults', 'default');
     $handler->override_option('arguments', array(
       'entity_id_raw' => array(
-        'id' => 'entity_id_rawr',
+        'id' => 'entity_id_raw',
         'table' => $view->base_table,
         'field' => 'entity_id_raw',
         'default_action' => 'not found',
