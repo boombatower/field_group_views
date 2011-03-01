@@ -164,8 +164,10 @@ function field_group_views_flush_caches_interator($group) {
   $primary_field_table = "field_data_$primary_field";
 
   // If the related view does not exist or the primary table needs to be
-  // changed the go through the view creation process.
-  if ($primary_field && (!$view || $view->base_table != $primary_field_table)) {
+  // changed then go through the view creation process. Either the standard
+  // field_data table or field_revision table is fine, but if a view is
+  // generated it will always use the field_data table.
+  if ($primary_field && (!$view || ($view->base_table != $primary_field_table && $view->base_table != "field_revision_$primary_field"))) {
     // If view already exists then delete it.
     if ($view) {
       $view->delete();
